@@ -596,6 +596,11 @@
 	            var room = _a[_i];
 	            if (room.kind === 0)
 	                continue;
+	            for (var x = room.rect.left; x < room.rect.right; x++) {
+	                for (var y = room.rect.top; y < room.rect.bottom; y++) {
+	                    game.debug.geom(new Phaser.Rectangle(x * scale, y * scale, scale, scale), 'rgba(0, 162, 255, 0.1)', false);
+	                }
+	            }
 	            var rect = new Phaser.Rectangle(room.rect.left * scale, room.rect.top * scale, room.rect.width * scale, room.rect.height * scale);
 	            game.debug.geom(rect, '#00A2FF', false);
 	        }
