@@ -1,0 +1,5 @@
+require('./lib/pixi.min.js')
+require('./lib/phaser.min.js')
+require('./jssrc/util.js')
+require('./jssrc/delaunay.js')
+agroprom = require('./jssrc/agroprom.js')
