@@ -1,4 +1,4 @@
-/// <reference path="phaser.d.ts"/>
+/// <reference path="./lib/phaser.d.ts"/>
 
 export namespace dset {
     class Node<T> {
@@ -104,9 +104,42 @@ export namespace geom {
         if (rect.bottom < leftY && rect.bottom < rightY) return false;
         return true;
     }
+
+    export function rectanglePerimeter(rect: Phaser.Rectangle): {x: number, y: number}[] {
+        var result = [],
+            x = rect.left,
+            y = rect.top,
+            dx = 1,
+            dy = 0;
+
+        while (true) {
+            result.push({'x': x, 'y': y});
+            x += dx;
+            y += dy;
+            if (x == rect.right && y == rect.top) {
+                dx = 0; dy = 1;
+            } else if (x == rect.right && y == rect.bottom) {
+                dx = -1; dy = 0;
+            } else if (x == rect.left && y == rect.bottom) {
+                dx = 0; dy = -1;
+            } else if (x == rect.left && y == rect.top) {
+                break;
+            }
+        }
+        return result;
+    }
 }
 
 export function removeElement<T>(array: T[], element: T): T {
     var i = array.indexOf(element);
     return (i === -1) ? null : array.splice(i, 1)[0];
+}
+
+export function setDefault(object: {}, index: number | string, provider: ()=>any): any {
+    var val = object[index];
+    if (val === undefined) {
+        val = provider();
+        object[index] = val;
+    }
+    return val;
 }

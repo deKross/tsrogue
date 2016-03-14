@@ -94,7 +94,6 @@
 /* 6 */
 /***/ function(module, exports) {
 
-	"use strict";
 	var dset;
 	(function (dset) {
 	    var Node = (function () {
@@ -104,12 +103,12 @@
 	            this.rank = 0;
 	        }
 	        return Node;
-	    }());
+	    })();
 	    var Dset = (function () {
 	        function Dset(entries) {
 	            this.data = {};
-	            for (var _i = 0, entries_1 = entries; _i < entries_1.length; _i++) {
-	                var entry = entries_1[_i];
+	            for (var _i = 0; _i < entries.length; _i++) {
+	                var entry = entries[_i];
 	                this.data[entry.toString()] = new Node(entry);
 	            }
 	        }
@@ -140,7 +139,7 @@
 	            }
 	        };
 	        return Dset;
-	    }());
+	    })();
 	    dset.Dset = Dset;
 	})(dset = exports.dset || (exports.dset = {}));
 	var geom;
@@ -191,19 +190,52 @@
 	        return true;
 	    }
 	    geom.lineIntersectsRect = lineIntersectsRect;
+	    function rectanglePerimeter(rect) {
+	        var result = [], x = rect.left, y = rect.top, dx = 1, dy = 0;
+	        while (true) {
+	            result.push({ 'x': x, 'y': y });
+	            x += dx;
+	            y += dy;
+	            if (x == rect.right && y == rect.top) {
+	                dx = 0;
+	                dy = 1;
+	            }
+	            else if (x == rect.right && y == rect.bottom) {
+	                dx = -1;
+	                dy = 0;
+	            }
+	            else if (x == rect.left && y == rect.bottom) {
+	                dx = 0;
+	                dy = -1;
+	            }
+	            else if (x == rect.left && y == rect.top) {
+	                break;
+	            }
+	        }
+	        return result;
+	    }
+	    geom.rectanglePerimeter = rectanglePerimeter;
 	})(geom = exports.geom || (exports.geom = {}));
 	function removeElement(array, element) {
 	    var i = array.indexOf(element);
 	    return (i === -1) ? null : array.splice(i, 1)[0];
 	}
 	exports.removeElement = removeElement;
+	function setDefault(object, index, provider) {
+	    var val = object[index];
+	    if (val === undefined) {
+	        val = provider();
+	        object[index] = val;
+	    }
+	    return val;
+	}
+	exports.setDefault = setDefault;
 
 
 /***/ },
 /* 7 */
 /***/ function(module, exports, __webpack_require__) {
 
-	"use strict";
 	var util_1 = __webpack_require__(6);
 	var QuadEdge = (function () {
 	    function QuadEdge(origin, destination) {
@@ -296,7 +328,7 @@
 	        return util_1.geom.isCCW(point, this.dest, this.orig);
 	    };
 	    return QuadEdge;
-	}());
+	})();
 	var SimpleEdge = (function () {
 	    function SimpleEdge(origin, destination, weight) {
 	        this.origin = origin;
@@ -305,7 +337,7 @@
 	    }
 	    ;
 	    return SimpleEdge;
-	}());
+	})();
 	var Delaunay = (function () {
 	    function Delaunay() {
 	        this.edges = [];
@@ -351,8 +383,8 @@
 	    };
 	    Delaunay.prototype.calculateBbox = function (points) {
 	        var p = points.shift(), min_x = p.x, max_x = p.x, min_y = p.y, max_y = p.y;
-	        for (var _i = 0, points_1 = points; _i < points_1.length; _i++) {
-	            var point = points_1[_i];
+	        for (var _i = 0; _i < points.length; _i++) {
+	            var point = points[_i];
 	            min_x = Math.min(min_x, point.x);
 	            max_x = Math.max(max_x, point.x);
 	            min_y = Math.min(min_y, point.y);
@@ -375,8 +407,8 @@
 	        if (storeVertices) {
 	            this.vertices = points.slice();
 	        }
-	        for (var _i = 0, points_2 = points; _i < points_2.length; _i++) {
-	            var point = points_2[_i];
+	        for (var _i = 0; _i < points.length; _i++) {
+	            var point = points[_i];
 	            this.insertPoint(point);
 	        }
 	    };
@@ -488,7 +520,7 @@
 	        return result;
 	    };
 	    return Delaunay;
-	}());
+	})();
 	exports.Delaunay = Delaunay;
 
 
@@ -496,7 +528,6 @@
 /* 8 */
 /***/ function(module, exports, __webpack_require__) {
 
-	"use strict";
 	var delaunay_1 = __webpack_require__(7);
 	var util_1 = __webpack_require__(6);
 	var Kind;
@@ -504,6 +535,16 @@
 	    Kind[Kind["HIDDEN"] = 0] = "HIDDEN";
 	    Kind[Kind["NORMAL"] = 1] = "NORMAL";
 	})(Kind || (Kind = {}));
+	var Door = (function () {
+	    function Door(x, y, one, other) {
+	        this.x = x;
+	        this.y = y;
+	        this.one = one;
+	        this.other = other;
+	    }
+	    ;
+	    return Door;
+	})();
 	var Room = (function () {
 	    function Room(rect) {
 	        this.rect = rect;
@@ -511,10 +552,21 @@
 	        this.child1 = null;
 	        this.child2 = null;
 	        this.kind = 0;
+	        this.doors = [];
+	        this.id = Room.maxID++;
 	    }
 	    ;
+	    Room.prototype.connected = function (other) {
+	        for (var _i = 0, _a = this.doors; _i < _a.length; _i++) {
+	            var door = _a[_i];
+	            if (door.other === other || door.one === other)
+	                return true;
+	        }
+	        return false;
+	    };
+	    Room.maxID = 0;
 	    return Room;
-	}());
+	})();
 	var Agroprom = (function () {
 	    function Agroprom(width, height) {
 	        this.width = width;
@@ -531,11 +583,6 @@
 	        this.rooms.push(root);
 	        while (this.rooms.length) {
 	            var current = this.rooms.shift();
-	            if (this.checkMain(current)) {
-	                this.result.push(current);
-	                this.spanVertices.push(new Phaser.Point(current.rect.centerX, current.rect.centerY).ceil());
-	                continue;
-	            }
 	            if (!this.checkRoom(current)) {
 	                this.result.push(current);
 	                continue;
@@ -543,16 +590,64 @@
 	            var slice = this.getSlice(current.rect);
 	            this.divide(current, slice);
 	        }
+	        var spanNum = this.rng.between(3, Math.max(3, this.result.length / 3)), processed = [];
+	        while (spanNum) {
+	            var room = this.rng.pick(this.result);
+	            if (processed.indexOf(room) >= 0)
+	                continue;
+	            processed.push(room);
+	            spanNum--;
+	            this.spanVertices.push(new Phaser.Point(room.rect.centerX, room.rect.centerY).ceil());
+	        }
+	        var neighbourhood = {};
+	        for (var _i = 0, _a = this.result; _i < _a.length; _i++) {
+	            var room1 = _a[_i];
+	            var array1 = util_1.setDefault(neighbourhood, room1.id, function () { return new Array(); });
+	            for (var _b = 0, _c = this.result; _b < _c.length; _b++) {
+	                var room2 = _c[_b];
+	                if (room1 === room2)
+	                    continue;
+	                if (room1.rect.intersects(room2.rect, 1)) {
+	                    if (array1.indexOf(room2) >= 0)
+	                        continue;
+	                    array1.push(room2);
+	                    var array2 = util_1.setDefault(neighbourhood, room2.id, function () { return Array(); });
+	                    if (array2.indexOf(room1) < 0) {
+	                        array2.push(room1);
+	                    }
+	                }
+	            }
+	        }
 	        var delaunay = new delaunay_1.Delaunay();
 	        delaunay.triangulate(this.spanVertices, true);
 	        this.spanEdges = delaunay.kruskal();
-	        for (var _i = 0, _a = this.spanEdges; _i < _a.length; _i++) {
-	            var edge = _a[_i];
-	            for (var _b = 0, _c = this.result; _b < _c.length; _b++) {
-	                var room = _c[_b];
+	        for (var _d = 0, _e = this.spanEdges; _d < _e.length; _d++) {
+	            var edge = _e[_d];
+	            for (var _f = 0, _g = this.result; _f < _g.length; _f++) {
+	                var room = _g[_f];
 	                if (util_1.geom.lineIntersectsRect(edge, room.rect)) {
 	                    room.kind = 1;
 	                }
+	            }
+	        }
+	        var intersection = new Phaser.Rectangle(0, 0, 0, 0);
+	        for (var _h = 0, _j = this.result; _h < _j.length; _h++) {
+	            var room = _j[_h];
+	            if (room.kind === 0)
+	                continue;
+	            for (var _k = 0, _l = neighbourhood[room.id]; _k < _l.length; _k++) {
+	                var neighbor = _l[_k];
+	                if (neighbor.kind === 0)
+	                    continue;
+	                if (room.connected(neighbor))
+	                    continue;
+	                room.rect.intersection(neighbor.rect, intersection);
+	                debugger;
+	                if (intersection.width < 3 && intersection.height < 3)
+	                    continue;
+	                var door = new Door(intersection.width ? intersection.x + this.rng.between(1, intersection.width - 2) : intersection.x, intersection.height ? intersection.y + this.rng.between(1, intersection.height - 2) : intersection.y, room, neighbor);
+	                room.doors.push(door);
+	                neighbor.doors.push(door);
 	            }
 	        }
 	    };
@@ -563,7 +658,7 @@
 	        return room.rect.volume > 70;
 	    };
 	    Agroprom.prototype.getSlice = function (rect) {
-	        var rectangularity = rect.width / rect.height, vertical = rectangularity < 1, dimension = vertical ? rect.height : rect.width, offset = (dimension / 4) + this.rng.between(0, dimension / 4);
+	        var rectangularity = rect.width / rect.height, vertical = rectangularity < 1, dimension = vertical ? rect.height : rect.width, offset = Math.ceil((dimension / 4) + this.rng.between(0, dimension / 4));
 	        if (vertical) {
 	            return new Phaser.Line(rect.left, rect.y + offset, rect.right, rect.y + offset);
 	        }
@@ -596,20 +691,31 @@
 	            var room = _a[_i];
 	            if (room.kind === 0)
 	                continue;
-	            var rect = new Phaser.Rectangle(room.rect.left * scale, room.rect.top * scale, room.rect.width * scale, room.rect.height * scale);
-	            game.debug.geom(rect, '#00A2FF', false);
+	            for (var x = room.rect.left; x < room.rect.right; x++) {
+	                for (var y = room.rect.top; y < room.rect.bottom; y++) {
+	                    game.debug.geom(new Phaser.Rectangle(x * scale, y * scale, scale, scale), 'rgba(0, 162, 255, 0.1)', false);
+	                }
+	            }
+	            for (var _b = 0, _c = util_1.geom.rectanglePerimeter(room.rect); _b < _c.length; _b++) {
+	                var point = _c[_b];
+	                game.debug.geom(new Phaser.Rectangle(point.x * scale, point.y * scale, scale, scale), '#00436a', true);
+	            }
+	            for (var _d = 0, _e = room.doors; _d < _e.length; _d++) {
+	                var door = _e[_d];
+	                game.debug.geom(new Phaser.Rectangle(door.x * scale, door.y * scale, scale, scale), 'rgba(255, 47, 0, 0.5)', true);
+	            }
 	        }
-	        for (var _b = 0, _c = this.spanVertices; _b < _c.length; _b++) {
-	            var ver = _c[_b];
+	        for (var _f = 0, _g = this.spanVertices; _f < _g.length; _f++) {
+	            var ver = _g[_f];
 	            game.debug.geom(new Phaser.Circle(ver.x * scale, ver.y * scale, 5), '#FF2F00');
 	        }
-	        for (var _d = 0, _e = this.spanEdges; _d < _e.length; _d++) {
-	            var edge = _e[_d];
-	            game.debug.geom(new Phaser.Line(edge.start.x * scale, edge.start.y * scale, edge.end.x * scale, edge.end.y * scale), '#FF2F00');
+	        for (var _h = 0, _j = this.spanEdges; _h < _j.length; _h++) {
+	            var edge = _j[_h];
+	            game.debug.geom(new Phaser.Line(edge.start.x * scale, edge.start.y * scale, edge.end.x * scale, edge.end.y * scale), 'rgba(255, 47, 0, 0.3)');
 	        }
 	    };
 	    return Agroprom;
-	}());
+	})();
 	exports.Agroprom = Agroprom;
 
 

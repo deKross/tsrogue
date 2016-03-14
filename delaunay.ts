@@ -1,4 +1,4 @@
-/// <reference path="phaser.d.ts"/>
+/// <reference path="./lib/phaser.d.ts"/>
 import {geom, dset, removeElement} from "./util";
 
 class QuadEdge {
