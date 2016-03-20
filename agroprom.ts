@@ -3,20 +3,28 @@ import {Delaunay} from "./delaunay";
 import {geom, setDefault} from "./util";
 
 const enum Kind {
-    HIDDEN, NORMAL
+    HIDDEN, NORMAL, FORBIDDEN
 }
 
 class Door {
-    constructor(public x: number, public y: number, public one: Room, public other: Room) {};
+    static maxID: number = 0;
+    id: number;
+    disabled: boolean = false;
+
+    constructor(public x: number, public y: number, public one: Room, public other: Room) {
+        this.id = Door.maxID++;
+    };
 }
 
 class Room {
     static maxID: number = 0;
+    static neighbourhood = {};
+
     id: number;
     parent: Room = null;
     child1: Room = null;
     child2: Room = null;
-    kind: Kind = Kind.HIDDEN;
+    kind: Kind = Kind.FORBIDDEN;
     doors: Door[] = [];
 
     constructor(public rect: Phaser.Rectangle) {
@@ -25,9 +33,36 @@ class Room {
 
     connected(other: Room): boolean {
         for (var door of this.doors) {
+            if (door.disabled) continue;
             if (door.other === other || door.one === other) return true;
         }
         return false;
+    }
+
+    get neighbors(): Room[] {
+        let result = Room.neighbourhood[this.id];
+        if (result === undefined) {
+            return [];
+        }
+        return result;
+    }
+
+    addNeighbor(other: Room) {
+        var array1 = <Array<Room>> setDefault(Room.neighbourhood, this.id, () => []);
+        if (array1.indexOf(other) >= 0) return;
+        array1.push(other);
+        var array2 = <Array<Room>> setDefault(Room.neighbourhood, other.id, () => []);
+        if (array2.indexOf(this) < 0) {
+            array2.push(this);
+        }
+    }
+
+    isNeighbors(other: Room): boolean {
+        let neighbors = Room.neighbourhood[this.id];
+        if (neighbors === undefined) {
+            return false;
+        }
+        return neighbors.indexOf(other) >= 0;
     }
 }
 
@@ -44,70 +79,106 @@ export class Agroprom {
         var root = new Room(new Phaser.Rectangle(0, 0, this.width, this.height));
         this.rooms.push(root);
         while (this.rooms.length) {
-            var current = this.rooms.shift();
+            let current = this.rooms.shift();
             if (!this.checkRoom(current)) {
                 this.result.push(current);
                 continue;
             }
-            var slice = this.getSlice(current.rect);
+            let slice = this.getSlice(current.rect);
             this.divide(current, slice);
         }
 
-        var spanNum = this.rng.between(3, Math.max(3, this.result.length / 3)),
-            processed = [];
+        let spanNum = this.rng.between(3, Math.max(3, this.result.length / 3)),
+            processed = [],
+            origins = {};
 
         while (spanNum) {
-            var room = this.rng.pick(this.result);
+            let room = this.rng.pick(this.result);
             if (processed.indexOf(room) >= 0) continue;
-            processed.push(room);
             spanNum--;
-            this.spanVertices.push(new Phaser.Point(room.rect.centerX, room.rect.centerY).ceil());
-        }
-
-        var neighbourhood = {};
-        for (var room1 of this.result) {
-            var array1 = <Array<Room>> setDefault(neighbourhood, room1.id, () => new Array<Room>());
-            for (var room2 of this.result) {
-                if (room1 === room2) continue;
-                if (room1.rect.intersects(room2.rect, 1)) {
-                    if (array1.indexOf(room2) >= 0) continue;
-                    array1.push(room2);
-                    var array2 = <Array<Room>> setDefault(neighbourhood, room2.id, () => Array<Room>());
-                    if (array2.indexOf(room1) < 0) {
-                        array2.push(room1);
-                    }
-                }
-            }
+            processed.push(room);
+            let point = new Phaser.Point(room.rect.centerX, room.rect.centerY).ceil();
+            this.spanVertices.push(point);
+            origins[point.toString()] = room;
         }
 
         var delaunay = new Delaunay();
         delaunay.triangulate(this.spanVertices, true);
         this.spanEdges = delaunay.kruskal();
 
-        for (var edge of this.spanEdges) {
-            for (var room of this.result) {
+        for (let edge of this.spanEdges) {
+            for (let room of this.result) {
                 if (geom.lineIntersectsRect(edge, room.rect)) {
                     room.kind = Kind.NORMAL;
                 }
             }
         }
 
-        var intersection = new Phaser.Rectangle(0, 0, 0, 0);
-        for (var room of this.result) {
-            if (room.kind === Kind.HIDDEN) continue;
-            for (var neighbor of neighbourhood[room.id]) {
-                if (neighbor.kind === Kind.HIDDEN) continue;
-                if (room.connected(neighbor)) continue;
-                room.rect.intersection(neighbor.rect, intersection);
+        let intersection = new Phaser.Rectangle(0, 0, 0, 0);
+
+        for (let one of this.result) {
+            for (let other of this.result) {
+                if (one === other) continue;
+                if (one.isNeighbors(other)) continue;
+                intersection.setTo(-1, 0, 0, 0);
+                one.rect.intersection(other.rect, intersection);
+                //if (one.rect.intersects(other.rect)) {
+                if (intersection.x < 0) continue;
+                one.addNeighbor(other);
                 if (intersection.width < 3 && intersection.height < 3) continue;
+                if (one.kind === Kind.FORBIDDEN || other.kind === Kind.FORBIDDEN) continue;
                 var door = new Door(
                     intersection.width ? intersection.x + this.rng.between(1, intersection.width - 2) : intersection.x,
                     intersection.height ? intersection.y + this.rng.between(1, intersection.height - 2) : intersection.y,
-                    room, neighbor);
-                room.doors.push(door);
-                neighbor.doors.push(door);
+                    one, other);
+                one.doors.push(door);
+                other.doors.push(door);
             }
         }
+
+        function isConnected(one: Room, other: Room, processed: Room[] = []): boolean {
+            if (one.connected(other)) return true;
+            for (let room of one.neighbors) {
+                if (room === other) return false;
+                if (room.kind !== Kind.NORMAL) continue;
+                if (processed.indexOf(room) >= 0) continue;
+                processed.push(room);
+                if (isConnected(room, other, processed)) return true;
+            }
+            return false;
+        }
+
+        for (let room of this.result) {
+            Phaser.ArrayUtils.shuffle(Room.neighbourhood[room.id]);
+        }
+        let removed = 0;
+        for (let room of this.result) {
+            for (let n1 of room.neighbors) {
+                if (!room.connected(n1)) continue;
+                for (let n2 of room.neighbors) {
+                    if (n1 === n2) continue;
+                    if (!n1.connected(n2) || !room.connected(n2)) continue;
+                    let r = (this.rng.sign() > 1) ? room : n1;
+                    for (let door of r.doors) {
+                        if ((door.one === r && door.other === n2) || (door.one === n2 && door.other === r)) {
+                            door.disabled = true;
+                            removed++;
+                        }
+                    }
+                }
+            }
+            //for (let door of room.doors) {
+            //    if (door.disabled) continue;
+            //    let other = (door.one === room) ? door.other : door.one;
+            //    door.disabled = true;
+            //    if (!isConnected(room, other)) {
+            //        door.disabled = false;
+            //    } else {
+            //        removed++;
+            //    }
+            //}
+        }
+        console.log(removed);
     }
 
     private checkRoom(room: Room): boolean {
@@ -131,10 +202,10 @@ export class Agroprom {
             rect = room.rect;
 
         if (slice.left === slice.right) {
-            one = geom.rectangleFromCoords(rect.left, rect.top, slice.x - 1, rect.bottom);
+            one = geom.rectangleFromCoords(rect.left, rect.top, slice.x, rect.bottom);
             other = geom.rectangleFromCoords(slice.x - 1, rect.top, rect.right, rect.bottom);
         } else {
-            one = geom.rectangleFromCoords(rect.left, rect.top, rect.right, slice.y - 1);
+            one = geom.rectangleFromCoords(rect.left, rect.top, rect.right, slice.y);
             other = geom.rectangleFromCoords(rect.left, slice.y - 1, rect.right, rect.bottom);
         }
         if (one.width < 3 || one.height < 3 || other.width < 3 || other.height < 3) {
@@ -155,7 +226,7 @@ export class Agroprom {
 
     debugDraw(game: Phaser.Game, scale: number) {
         for (var room of this.result) {
-            if (room.kind === Kind.HIDDEN) continue;
+            if (room.kind === Kind.FORBIDDEN) continue;
             for (var x = room.rect.left; x < room.rect.right; x++) {
                 for (var y = room.rect.top; y < room.rect.bottom; y++) {
                     game.debug.geom(new Phaser.Rectangle(x * scale, y * scale, scale, scale), 'rgba(0, 162, 255, 0.1)', false);
@@ -165,6 +236,7 @@ export class Agroprom {
                 game.debug.geom(new Phaser.Rectangle(point.x * scale, point.y * scale, scale, scale), '#00436a', true);
             }
             for (var door of room.doors) {
+                if (door.disabled) continue;
                 game.debug.geom(new Phaser.Rectangle(door.x * scale, door.y * scale, scale, scale), 'rgba(255, 47, 0, 0.5)', true);
             }
         }

@@ -107,8 +107,12 @@ export namespace geom {
 
     export function rectanglePerimeter(rect: Phaser.Rectangle): {x: number, y: number}[] {
         var result = [],
-            x = rect.left,
-            y = rect.top,
+            left = rect.left,
+            right = rect.right - 1,
+            top = rect.top,
+            bottom = rect.bottom - 1,
+            x = left,
+            y = top,
             dx = 1,
             dy = 0;
 
@@ -116,13 +120,13 @@ export namespace geom {
             result.push({'x': x, 'y': y});
             x += dx;
             y += dy;
-            if (x == rect.right && y == rect.top) {
+            if (x == right && y == top) {
                 dx = 0; dy = 1;
-            } else if (x == rect.right && y == rect.bottom) {
+            } else if (x == right && y == bottom) {
                 dx = -1; dy = 0;
-            } else if (x == rect.left && y == rect.bottom) {
+            } else if (x == left && y == bottom) {
                 dx = 0; dy = -1;
-            } else if (x == rect.left && y == rect.top) {
+            } else if (x == left && y == top) {
                 break;
             }
         }
