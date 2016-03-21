@@ -256,13 +256,12 @@ export class Delaunay {
     }
 
     get simpleEdges(): SimpleEdge[] {
-        var edges = [],
-            out = new Phaser.Point();
+        var edges = [];
 
         this.processTriangles((A: Phaser.Point, B: Phaser.Point, C: Phaser.Point) => {
-            edges.push(new SimpleEdge(A, B, Phaser.Point.subtract(B, A, out).getMagnitudeSq()));
-            edges.push(new SimpleEdge(B, C, Phaser.Point.subtract(C, B, out).getMagnitudeSq()));
-            edges.push(new SimpleEdge(C, A, Phaser.Point.subtract(A, C, out).getMagnitudeSq()));
+            edges.push(new SimpleEdge(A, B, Phaser.Math.distanceSq(A.x, A.y, B.x, B.y)));
+            edges.push(new SimpleEdge(B, C, Phaser.Math.distanceSq(B.x, B.y, C.x, C.y)));
+            edges.push(new SimpleEdge(C, A, Phaser.Math.distanceSq(C.x, C.y, A.x, A.y)));
         });
         return edges;
     }
@@ -279,14 +278,14 @@ export class Delaunay {
         } else {
             edges.sort((one: SimpleEdge, other: SimpleEdge) => other.weight - one.weight);
         }
-        var vertices_dset = new dset.Dset<Phaser.Point>(this.vertices);
+        var verticesDset = new dset.Dset<Phaser.Point>(this.vertices, (point: Phaser.Point) => point.x + ':' + point.y);
         while (edges.length) {
             var edge = edges.shift(),
                 orig = edge.origin,
                 dest = edge.destination;
 
-            if (vertices_dset.disjoint(orig, dest)) {
-                vertices_dset.union(orig, dest);
+            if (verticesDset.disjoint(orig, dest)) {
+                verticesDset.union(orig, dest);
                 result.push(new Phaser.Line(orig.x, orig.y, dest.x, dest.y));
             }
         }

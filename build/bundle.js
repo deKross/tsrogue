@@ -105,15 +105,19 @@
 	        return Node;
 	    })();
 	    var Dset = (function () {
-	        function Dset(entries) {
+	        function Dset(entries, convert) {
 	            this.data = {};
+	            if (convert === undefined) {
+	                convert = function (item) { return item.toString(); };
+	            }
+	            this.convert = convert;
 	            for (var _i = 0; _i < entries.length; _i++) {
 	                var entry = entries[_i];
-	                this.data[entry.toString()] = new Node(entry);
+	                this.data[this.convert(entry)] = new Node(entry);
 	            }
 	        }
 	        Dset.prototype.find = function (entry) {
-	            var node = this.data[entry.toString()];
+	            var node = this.data[this.convert(entry)];
 	            while (node.parent.data != node.data) {
 	                node.parent = node.parent.parent;
 	                node = node.parent;
@@ -230,6 +234,17 @@
 	    return val;
 	}
 	exports.setDefault = setDefault;
+	function reservoirSample(source, count, rng) {
+	    var result = source.slice(0, count);
+	    for (var i = count + 1; i < source.length; i++) {
+	        var j = rng.between(1, i);
+	        if (j < count) {
+	            result[j] = source[i];
+	        }
+	    }
+	    return result;
+	}
+	exports.reservoirSample = reservoirSample;
 
 
 /***/ },
@@ -486,11 +501,11 @@
 	    });
 	    Object.defineProperty(Delaunay.prototype, "simpleEdges", {
 	        get: function () {
-	            var edges = [], out = new Phaser.Point();
+	            var edges = [];
 	            this.processTriangles(function (A, B, C) {
-	                edges.push(new SimpleEdge(A, B, Phaser.Point.subtract(B, A, out).getMagnitudeSq()));
-	                edges.push(new SimpleEdge(B, C, Phaser.Point.subtract(C, B, out).getMagnitudeSq()));
-	                edges.push(new SimpleEdge(C, A, Phaser.Point.subtract(A, C, out).getMagnitudeSq()));
+	                edges.push(new SimpleEdge(A, B, Phaser.Math.distanceSq(A.x, A.y, B.x, B.y)));
+	                edges.push(new SimpleEdge(B, C, Phaser.Math.distanceSq(B.x, B.y, C.x, C.y)));
+	                edges.push(new SimpleEdge(C, A, Phaser.Math.distanceSq(C.x, C.y, A.x, A.y)));
 	            });
 	            return edges;
 	        },
@@ -509,11 +524,11 @@
 	        else {
 	            edges.sort(function (one, other) { return other.weight - one.weight; });
 	        }
-	        var vertices_dset = new util_1.dset.Dset(this.vertices);
+	        var verticesDset = new util_1.dset.Dset(this.vertices, function (point) { return point.x + ':' + point.y; });
 	        while (edges.length) {
 	            var edge = edges.shift(), orig = edge.origin, dest = edge.destination;
-	            if (vertices_dset.disjoint(orig, dest)) {
-	                vertices_dset.union(orig, dest);
+	            if (verticesDset.disjoint(orig, dest)) {
+	                verticesDset.union(orig, dest);
 	                result.push(new Phaser.Line(orig.x, orig.y, dest.x, dest.y));
 	            }
 	        }
@@ -542,11 +557,13 @@
 	        this.y = y;
 	        this.one = one;
 	        this.other = other;
-	        this.disabled = false;
-	        this.id = Door.maxID++;
+	        one.doors.push(this);
+	        other.doors.push(this);
 	    }
 	    ;
-	    Door.maxID = 0;
+	    Door.prototype.getOther = function (one) {
+	        return (this.one === one) ? this.other : this.one;
+	    };
 	    return Door;
 	})();
 	var Room = (function () {
@@ -563,8 +580,6 @@
 	    Room.prototype.connected = function (other) {
 	        for (var _i = 0, _a = this.doors; _i < _a.length; _i++) {
 	            var door = _a[_i];
-	            if (door.disabled)
-	                continue;
 	            if (door.other === other || door.one === other)
 	                return true;
 	        }
@@ -607,52 +622,46 @@
 	        this.width = width;
 	        this.height = height;
 	        this.rng = new Phaser.RandomDataGenerator([(Date.now() * Math.random()).toString()]);
-	        this.result = [];
 	        this.rooms = [];
+	        this.queue = [];
 	        this.spanVertices = [];
 	        this.spanEdges = [];
 	    }
 	    ;
 	    Agroprom.prototype.generateDungeon = function () {
 	        var root = new Room(new Phaser.Rectangle(0, 0, this.width, this.height));
-	        this.rooms.push(root);
-	        while (this.rooms.length) {
-	            var current = this.rooms.shift();
+	        this.queue.push(root);
+	        while (this.queue.length) {
+	            var current = this.queue.shift();
 	            if (!this.checkRoom(current)) {
-	                this.result.push(current);
+	                this.rooms.push(current);
 	                continue;
 	            }
 	            var slice = this.getSlice(current.rect);
 	            this.divide(current, slice);
 	        }
-	        var spanNum = this.rng.between(3, Math.max(3, this.result.length / 3)), processed = [], origins = {};
-	        while (spanNum) {
-	            var room = this.rng.pick(this.result);
-	            if (processed.indexOf(room) >= 0)
-	                continue;
-	            spanNum--;
-	            processed.push(room);
-	            var point = new Phaser.Point(room.rect.centerX, room.rect.centerY).ceil();
-	            this.spanVertices.push(point);
-	            origins[point.toString()] = room;
+	        var spanNum = this.rng.between(3, Math.max(3, this.rooms.length / 3));
+	        for (var _i = 0, _a = util_1.reservoirSample(this.rooms, spanNum, this.rng); _i < _a.length; _i++) {
+	            var room = _a[_i];
+	            this.spanVertices.push(new Phaser.Point(room.rect.centerX, room.rect.centerY).ceil());
 	        }
 	        var delaunay = new delaunay_1.Delaunay();
 	        delaunay.triangulate(this.spanVertices, true);
 	        this.spanEdges = delaunay.kruskal();
-	        for (var _i = 0, _a = this.spanEdges; _i < _a.length; _i++) {
-	            var edge = _a[_i];
-	            for (var _b = 0, _c = this.result; _b < _c.length; _b++) {
-	                var room = _c[_b];
+	        for (var _b = 0, _c = this.spanEdges; _b < _c.length; _b++) {
+	            var edge = _c[_b];
+	            for (var _d = 0, _e = this.rooms; _d < _e.length; _d++) {
+	                var room = _e[_d];
 	                if (util_1.geom.lineIntersectsRect(edge, room.rect)) {
 	                    room.kind = 1;
 	                }
 	            }
 	        }
-	        var intersection = new Phaser.Rectangle(0, 0, 0, 0);
-	        for (var _d = 0, _e = this.result; _d < _e.length; _d++) {
-	            var one = _e[_d];
-	            for (var _f = 0, _g = this.result; _f < _g.length; _f++) {
-	                var other = _g[_f];
+	        var roomsDset = new util_1.dset.Dset(this.rooms, function (room) { return room.id; }), intersection = new Phaser.Rectangle(0, 0, 0, 0);
+	        for (var _f = 0, _g = this.rooms; _f < _g.length; _f++) {
+	            var one = _g[_f];
+	            for (var _h = 0, _j = this.rooms; _h < _j.length; _h++) {
+	                var other = _j[_h];
 	                if (one === other)
 	                    continue;
 	                if (one.isNeighbors(other))
@@ -666,58 +675,12 @@
 	                    continue;
 	                if (one.kind === 2 || other.kind === 2)
 	                    continue;
-	                var door = new Door(intersection.width ? intersection.x + this.rng.between(1, intersection.width - 2) : intersection.x, intersection.height ? intersection.y + this.rng.between(1, intersection.height - 2) : intersection.y, one, other);
-	                one.doors.push(door);
-	                other.doors.push(door);
-	            }
-	        }
-	        function isConnected(one, other, processed) {
-	            if (processed === void 0) { processed = []; }
-	            if (one.connected(other))
-	                return true;
-	            for (var _i = 0, _a = one.neighbors; _i < _a.length; _i++) {
-	                var room = _a[_i];
-	                if (room === other)
-	                    return false;
-	                if (room.kind !== 1)
-	                    continue;
-	                if (processed.indexOf(room) >= 0)
-	                    continue;
-	                processed.push(room);
-	                if (isConnected(room, other, processed))
-	                    return true;
-	            }
-	            return false;
-	        }
-	        for (var _h = 0, _j = this.result; _h < _j.length; _h++) {
-	            var room = _j[_h];
-	            Phaser.ArrayUtils.shuffle(Room.neighbourhood[room.id]);
-	        }
-	        var removed = 0;
-	        for (var _k = 0, _l = this.result; _k < _l.length; _k++) {
-	            var room = _l[_k];
-	            for (var _m = 0, _o = room.neighbors; _m < _o.length; _m++) {
-	                var n1 = _o[_m];
-	                if (!room.connected(n1))
-	                    continue;
-	                for (var _p = 0, _q = room.neighbors; _p < _q.length; _p++) {
-	                    var n2 = _q[_p];
-	                    if (n1 === n2)
-	                        continue;
-	                    if (!n1.connected(n2) || !room.connected(n2))
-	                        continue;
-	                    var r = (this.rng.sign() > 1) ? room : n1;
-	                    for (var _r = 0, _s = r.doors; _r < _s.length; _r++) {
-	                        var door_1 = _s[_r];
-	                        if ((door_1.one === r && door_1.other === n2) || (door_1.one === n2 && door_1.other === r)) {
-	                            door_1.disabled = true;
-	                            removed++;
-	                        }
-	                    }
+	                if (roomsDset.disjoint(one, other)) {
+	                    roomsDset.union(one, other);
+	                    new Door(intersection.width ? intersection.x + this.rng.between(1, intersection.width - 2) : intersection.x, intersection.height ? intersection.y + this.rng.between(1, intersection.height - 2) : intersection.y, one, other);
 	                }
 	            }
 	        }
-	        console.log(removed);
 	    };
 	    Agroprom.prototype.checkRoom = function (room) {
 	        return room.rect.volume > 70;
@@ -740,7 +703,7 @@
 	            other = util_1.geom.rectangleFromCoords(rect.left, slice.y - 1, rect.right, rect.bottom);
 	        }
 	        if (one.width < 3 || one.height < 3 || other.width < 3 || other.height < 3) {
-	            this.result.push(room);
+	            this.rooms.push(room);
 	            return;
 	        }
 	        var rone = new Room(one), rother = new Room(other);
@@ -748,11 +711,11 @@
 	        rother.parent = room;
 	        room.child1 = rone;
 	        room.child2 = rother;
-	        this.rooms.push(rone);
-	        this.rooms.push(rother);
+	        this.queue.push(rone);
+	        this.queue.push(rother);
 	    };
 	    Agroprom.prototype.debugDraw = function (game, scale) {
-	        for (var _i = 0, _a = this.result; _i < _a.length; _i++) {
+	        for (var _i = 0, _a = this.rooms; _i < _a.length; _i++) {
 	            var room = _a[_i];
 	            if (room.kind === 2)
 	                continue;
@@ -767,8 +730,6 @@
 	            }
 	            for (var _d = 0, _e = room.doors; _d < _e.length; _d++) {
 	                var door = _e[_d];
-	                if (door.disabled)
-	                    continue;
 	                game.debug.geom(new Phaser.Rectangle(door.x * scale, door.y * scale, scale, scale), 'rgba(255, 47, 0, 0.5)', true);
 	            }
 	        }

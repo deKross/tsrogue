@@ -12,15 +12,20 @@ export namespace dset {
 
     export class Dset<T> {
         private data: {} = {};
+        private convert: (T) => string|number;
 
-        constructor(entries: T[]) {
+        constructor(entries: T[], convert?: (T) => string|number) {
+            if (convert === undefined) {
+                convert = (item: T) => item.toString();
+            }
+            this.convert = convert;
             for (var entry of entries) {
-                this.data[entry.toString()] = new Node(entry);
+                this.data[this.convert(entry)] = new Node(entry);
             }
         }
 
         find(entry: T): Node<T> {
-            var node = this.data[entry.toString()];
+            var node = this.data[this.convert(entry)];
             while (node.parent.data != node.data) {
                 node.parent = node.parent.parent;
                 node = node.parent;
@@ -146,4 +151,17 @@ export function setDefault(object: {}, index: number | string, provider: ()=>any
         object[index] = val;
     }
     return val;
+}
+
+export function reservoirSample<T>(source: T[], count: number, rng: Phaser.RandomDataGenerator): T[] {
+    let result = source.slice(0, count);
+
+    for (let i = count + 1; i < source.length; i++) {
+        let j = rng.between(1, i);
+        if (j < count) {
+            result[j] = source[i];
+        }
+    }
+
+    return result;
 }
