@@ -39,6 +39,12 @@ class Room {
         return false;
     }
 
+    eachConnected(callback: (room: Room) => void) {
+        for (let door of this.doors) {
+            callback(door.getOther(this));
+        }
+    }
+
     get neighbors(): Room[] {
         let result = Room.neighbourhood[this.id];
         if (result === undefined) {
