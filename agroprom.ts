@@ -66,6 +66,72 @@ class Room {
     }
 }
 
+namespace walker {
+    export class Node {
+        visited = false;
+        distance = 0;
+        key = 0;
+        treasure = 0;
+        enemies = 0;
+    }
+
+    export class Entry {
+        constructor(public from: Room, public to: Room) {};
+    }
+}
+
+class Walker {
+    nodes: {} = {};
+    keyLinks: {} = {};
+    keyLevel: number = 0;
+    treasures: Room[] = [];
+    enemies: Room[] = [];
+    locks: Door[] = [];
+
+    constructor(public rooms: Room[], public rng: Phaser.RandomDataGenerator) {
+        for (let room of rooms) {
+            this.nodes[room.id] = new walker.Node();
+        }
+    }
+
+    process(from: Room, room: Room, node: walker.Node) {
+        if (room.doors.length === 1) {
+            this.treasures.push(room);
+            node.treasure = this.rng.between(1, 3);
+        }
+        if (this.rng.between(1, 4) < room.doors.length) {
+            this.enemies.push(room);
+            node.enemies = this.rng.between(1, room.doors.length * 1.5);
+        }
+        if (from !== null && room.doors.length >= 2 && this.rng.frac() > 0.7) {
+            let door = this.rng.pick(room.doors.filter((door) => door.getOther(room) !== from));
+            this.locks.push(door);
+            this.nodes[door.getOther(room).id].key = ++this.keyLevel;
+            this.keyLinks[this.keyLevel] = node.key;
+        }
+    }
+
+    walk(start: Room = this.rooms[0]) {
+        let queue: walker.Entry[] = [new walker.Entry(null, start)];
+        while (queue.length) {
+            let entry = queue.shift(),
+                room = entry.to,
+                node = this.nodes[room.id],
+                thisWalker = this;
+
+            this.process(entry.from, room, node);
+            room.eachConnected(function(conRoom) {
+                let conNode = thisWalker.nodes[conRoom.id];
+                if (conNode.visited) return;
+                conNode.visited = true;
+                conNode.distance = node.distance + 1;
+                conNode.key = conNode.key || node.key;
+                queue.push(new walker.Entry(room, conRoom));
+            });
+        }
+    }
+}
+
 export class Agroprom {
     rng: Phaser.RandomDataGenerator = new Phaser.RandomDataGenerator([(Date.now() * Math.random()).toString()]);
     rooms: Room[] = [];

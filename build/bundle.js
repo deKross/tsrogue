@@ -94,6 +94,7 @@
 /* 6 */
 /***/ function(module, exports) {
 
+	"use strict";
 	var dset;
 	(function (dset) {
 	    var Node = (function () {
@@ -103,7 +104,7 @@
 	            this.rank = 0;
 	        }
 	        return Node;
-	    })();
+	    }());
 	    var Dset = (function () {
 	        function Dset(entries, convert) {
 	            this.data = {};
@@ -111,8 +112,8 @@
 	                convert = function (item) { return item.toString(); };
 	            }
 	            this.convert = convert;
-	            for (var _i = 0; _i < entries.length; _i++) {
-	                var entry = entries[_i];
+	            for (var _i = 0, entries_1 = entries; _i < entries_1.length; _i++) {
+	                var entry = entries_1[_i];
 	                this.data[this.convert(entry)] = new Node(entry);
 	            }
 	        }
@@ -143,7 +144,7 @@
 	            }
 	        };
 	        return Dset;
-	    })();
+	    }());
 	    dset.Dset = Dset;
 	})(dset = exports.dset || (exports.dset = {}));
 	var geom;
@@ -251,6 +252,7 @@
 /* 7 */
 /***/ function(module, exports, __webpack_require__) {
 
+	"use strict";
 	var util_1 = __webpack_require__(6);
 	var QuadEdge = (function () {
 	    function QuadEdge(origin, destination) {
@@ -343,7 +345,7 @@
 	        return util_1.geom.isCCW(point, this.dest, this.orig);
 	    };
 	    return QuadEdge;
-	})();
+	}());
 	var SimpleEdge = (function () {
 	    function SimpleEdge(origin, destination, weight) {
 	        this.origin = origin;
@@ -352,7 +354,7 @@
 	    }
 	    ;
 	    return SimpleEdge;
-	})();
+	}());
 	var Delaunay = (function () {
 	    function Delaunay() {
 	        this.edges = [];
@@ -398,8 +400,8 @@
 	    };
 	    Delaunay.prototype.calculateBbox = function (points) {
 	        var p = points.shift(), min_x = p.x, max_x = p.x, min_y = p.y, max_y = p.y;
-	        for (var _i = 0; _i < points.length; _i++) {
-	            var point = points[_i];
+	        for (var _i = 0, points_1 = points; _i < points_1.length; _i++) {
+	            var point = points_1[_i];
 	            min_x = Math.min(min_x, point.x);
 	            max_x = Math.max(max_x, point.x);
 	            min_y = Math.min(min_y, point.y);
@@ -422,8 +424,8 @@
 	        if (storeVertices) {
 	            this.vertices = points.slice();
 	        }
-	        for (var _i = 0; _i < points.length; _i++) {
-	            var point = points[_i];
+	        for (var _i = 0, points_2 = points; _i < points_2.length; _i++) {
+	            var point = points_2[_i];
 	            this.insertPoint(point);
 	        }
 	    };
@@ -535,7 +537,7 @@
 	        return result;
 	    };
 	    return Delaunay;
-	})();
+	}());
 	exports.Delaunay = Delaunay;
 
 
@@ -543,6 +545,7 @@
 /* 8 */
 /***/ function(module, exports, __webpack_require__) {
 
+	"use strict";
 	var delaunay_1 = __webpack_require__(7);
 	var util_1 = __webpack_require__(6);
 	var Kind;
@@ -565,7 +568,7 @@
 	        return (this.one === one) ? this.other : this.one;
 	    };
 	    return Door;
-	})();
+	}());
 	var Room = (function () {
 	    function Room(rect) {
 	        this.rect = rect;
@@ -584,6 +587,12 @@
 	                return true;
 	        }
 	        return false;
+	    };
+	    Room.prototype.eachConnected = function (callback) {
+	        for (var _i = 0, _a = this.doors; _i < _a.length; _i++) {
+	            var door = _a[_i];
+	            callback(door.getOther(this));
+	        }
 	    };
 	    Object.defineProperty(Room.prototype, "neighbors", {
 	        get: function () {
@@ -616,7 +625,84 @@
 	    Room.maxID = 0;
 	    Room.neighbourhood = {};
 	    return Room;
-	})();
+	}());
+	var walker;
+	(function (walker) {
+	    var Node = (function () {
+	        function Node() {
+	            this.visited = false;
+	            this.distance = 0;
+	            this.key = 0;
+	            this.treasure = 0;
+	            this.enemies = 0;
+	        }
+	        return Node;
+	    }());
+	    walker.Node = Node;
+	    var Entry = (function () {
+	        function Entry(from, to) {
+	            this.from = from;
+	            this.to = to;
+	        }
+	        ;
+	        return Entry;
+	    }());
+	    walker.Entry = Entry;
+	})(walker || (walker = {}));
+	var Walker = (function () {
+	    function Walker(rooms, rng) {
+	        this.rooms = rooms;
+	        this.rng = rng;
+	        this.nodes = {};
+	        this.keyLinks = {};
+	        this.keyLevel = 0;
+	        this.treasures = [];
+	        this.enemies = [];
+	        this.locks = [];
+	        for (var _i = 0, rooms_1 = rooms; _i < rooms_1.length; _i++) {
+	            var room = rooms_1[_i];
+	            this.nodes[room.id] = new walker.Node();
+	        }
+	    }
+	    Walker.prototype.process = function (from, room, node) {
+	        if (room.doors.length === 1) {
+	            this.treasures.push(room);
+	            node.treasure = this.rng.between(1, 3);
+	        }
+	        if (this.rng.between(1, 4) < room.doors.length) {
+	            this.enemies.push(room);
+	            node.enemies = this.rng.between(1, room.doors.length * 1.5);
+	        }
+	        if (from !== null && room.doors.length >= 2 && this.rng.frac() > 0.7) {
+	            var door = this.rng.pick(room.doors.filter(function (door) { return door.getOther(room) !== from; }));
+	            this.locks.push(door);
+	            this.nodes[door.getOther(room).id].key = ++this.keyLevel;
+	            this.keyLinks[this.keyLevel] = node.key;
+	        }
+	    };
+	    Walker.prototype.walk = function (start) {
+	        if (start === void 0) { start = this.rooms[0]; }
+	        var queue = [new walker.Entry(null, start)];
+	        var _loop_1 = function() {
+	            var entry = queue.shift(), room = entry.to, node = this_1.nodes[room.id], thisWalker = this_1;
+	            this_1.process(entry.from, room, node);
+	            room.eachConnected(function (conRoom) {
+	                var conNode = thisWalker.nodes[conRoom.id];
+	                if (conNode.visited)
+	                    return;
+	                conNode.visited = true;
+	                conNode.distance = node.distance + 1;
+	                conNode.key = conNode.key || node.key;
+	                queue.push(new walker.Entry(room, conRoom));
+	            });
+	        };
+	        var this_1 = this;
+	        while (queue.length) {
+	            _loop_1();
+	        }
+	    };
+	    return Walker;
+	}());
 	var Agroprom = (function () {
 	    function Agroprom(width, height) {
 	        this.width = width;
@@ -681,6 +767,8 @@
 	                }
 	            }
 	        }
+	        this.walker = new Walker(this.rooms.filter(function (room) { return room.kind !== 2; }), this.rng);
+	        this.walker.walk();
 	    };
 	    Agroprom.prototype.checkRoom = function (room) {
 	        return room.rect.volume > 70;
@@ -743,7 +831,7 @@
 	        }
 	    };
 	    return Agroprom;
-	})();
+	}());
 	exports.Agroprom = Agroprom;
 
 
