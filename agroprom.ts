@@ -33,10 +33,16 @@ class Room {
     };
 
     connected(other: Room): boolean {
-        for (var door of this.doors) {
+        for (let door of this.doors) {
             if (door.other === other || door.one === other) return true;
         }
         return false;
+    }
+
+    eachConnected(callback: (room: Room) => void) {
+        for (let door of this.doors) {
+            callback(door.getOther(this));
+        }
     }
 
     get neighbors(): Room[] {
@@ -48,10 +54,10 @@ class Room {
     }
 
     addNeighbor(other: Room) {
-        var array1 = <Array<Room>> setDefault(Room.neighbourhood, this.id, () => []);
+        let array1 = <Array<Room>> setDefault(Room.neighbourhood, this.id, () => []);
         if (array1.indexOf(other) >= 0) return;
         array1.push(other);
-        var array2 = <Array<Room>> setDefault(Room.neighbourhood, other.id, () => []);
+        let array2 = <Array<Room>> setDefault(Room.neighbourhood, other.id, () => []);
         if (array2.indexOf(this) < 0) {
             array2.push(this);
         }
@@ -66,12 +72,77 @@ class Room {
     }
 }
 
+namespace walker {
+    export class Node {
+        visited = false;
+        distance = 0;
+        key = 0;
+        treasure = 0;
+        enemies = 0;
+    }
+
+    export class Entry {
+        constructor(public from: Room, public to: Room) {};
+    }
+}
+
+class Walker {
+    nodes: {} = {};
+    keyLinks: {} = {};
+    keyLevel: number = 0;
+    treasures: Room[] = [];
+    enemies: Room[] = [];
+    locks: Door[] = [];
+
+    constructor(public rooms: Room[], public rng: Phaser.RandomDataGenerator) {
+        for (let room of rooms) {
+            this.nodes[room.id] = new walker.Node();
+        }
+    }
+
+    process(from: Room, room: Room, node: walker.Node) {
+        if (room.doors.length === 1) {
+            this.treasures.push(room);
+            node.treasure = this.rng.between(1, 3);
+        }
+        if (this.rng.between(1, 4) < room.doors.length) {
+            this.enemies.push(room);
+            node.enemies = this.rng.between(1, room.doors.length * 1.5);
+        }
+        if (room.doors.length >= 2 && this.rng.frac() > 0.7) {
+            let door = this.rng.pick(room.doors.filter((door) => door.getOther(room) !== from));
+            this.locks.push(door);
+            this.nodes[door.getOther(room).id].key = ++this.keyLevel;
+            this.keyLinks[this.keyLevel] = node.key;
+        }
+    }
+
+    walk(start: Room = this.rooms[0]) {
+        let queue: walker.Entry[] = [new walker.Entry(start, start)];
+        while (queue.length) {
+            let entry = queue.shift(),
+                room = entry.to,
+                node = this.nodes[room.id];
+            this.process(entry.from, room, node);
+            room.eachConnected(function(conRoom) {
+                let conNode = this.nodes[conRoom.id];
+                if (conNode.visited) return;
+                conNode.visited = true;
+                conNode.distance = node.distance + 1;
+                conNode.key = node.key;
+                queue.push(new walker.Entry(room, conRoom));
+            });
+        }
+    }
+}
+
 export class Agroprom {
     rng: Phaser.RandomDataGenerator = new Phaser.RandomDataGenerator([(Date.now() * Math.random()).toString()]);
     rooms: Room[] = [];
     queue: Room[] = [];
     spanVertices: Phaser.Point[] = [];
     spanEdges: Phaser.Line[] = [];
+    walker: Walker;
 
     constructor(public width: number, public height: number) {};
 
@@ -129,6 +200,9 @@ export class Agroprom {
                 }
             }
         }
+
+        this.walker = new Walker(this.rooms.filter((room) => room.kind !== Kind.FORBIDDEN), this.rng);
+        this.walker.walk();
     }
 
     private checkRoom(room: Room): boolean {
